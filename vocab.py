@@ -24,7 +24,7 @@ if __name__ == '__main__':
 	counter = CountVectorizer(
 			preprocessor=preprocessor,
 			tokenizer=tokenise,
-			min_df=3
+			min_df=5
 		)
 	data_file = open(sys.argv[1],'r')
 	counter.fit(data_file)

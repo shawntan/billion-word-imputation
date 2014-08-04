@@ -10,47 +10,33 @@ from numpy_hinton import print_arr
 from theano.printing import Print
 from vocab import read_file
 
+
 def create_vocab_vectors(vocab2id,size):
 	V = U.create_shared(U.initial_weights(len(vocab2id) + 1,size))
 	return V
 
-def pair_combine(X,W1,W2,b):
-	def step(i,inputs):
-		length = inputs.shape[0]
 
-		next_level = T.dot(inputs[T.arange(0,length-i-1)],W1) + T.dot(inputs[T.arange(1,length-i)],W2) + b
-		#next_level = next_level*(next_level > 0)
-		next_level = T.tanh(next_level) 
+def recurrent_combine(X,W_input,b_input,W_state_p,b_state_p,b_state,W_input_hidden,W_state_p_hidden):
+	def step(curr_input,state_p):
+		# Build next layer
+		state = T.dot(curr_input,W_input) + T.dot(state_p,W_state_p) + b_state
+		state = T.tanh(state)
 		
+		# RAE stuff
+		rep_curr_input = T.dot(state,W_input.T)   + b_input
+		rep_state_p    = T.dot(state,W_state_p.T) + b_state_p
 
-		return T.concatenate([next_level,T.zeros_like(inputs[:length-next_level.shape[0]])])
+		# Contributions to predictive hidden layer
+		hidden_partial = T.dot(state_p,W_state_p_hidden) + T.dot(curr_input,W_input_hidden)
+		return state,rep_curr_input,rep_state_p,hidden_partial
 
-	combined,_ = theano.scan(
-			step,
-			sequences    = [T.arange(X.shape[0]-1)],
-			outputs_info = [X],
-		)
-
-	return combined[-1,0], combined[0][:-1]
-
-
-def recurrent_combine(X,W1,b1,W2,b2,b):
-	def step(curr_in,hidden):
-		next_level = T.dot(curr_in,W1) + T.dot(hidden,W2) + b
-		next_level = T.tanh(next_level)
-		
-		reproduction_curr_in = T.dot(next_level,W1.T) + b1
-		reproduction_hidden  = T.dot(next_level,W2.T) + b2
-		return next_level,reproduction_curr_in,reproduction_hidden
-
-	[hiddens,rep_ins,rep_hiddens],_ = theano.scan(
+	[states,rep_inputs,rep_states,hidden_partials],_ = theano.scan(
 			step,
 			sequences    = [X[1:]],
-			outputs_info = [X[0],None,None]
+			outputs_info = [X[0],None,None,None]
 		)
 
-	return hiddens, rep_ins, rep_hiddens
-
+	return states,rep_inputs,rep_states,hidden_partials
 
 
 def missing_cost(scores,Y):
@@ -60,43 +46,72 @@ def missing_cost(scores,Y):
 	total_scores_diff = (T.sum(scores_diff) - scores_diff[Y])/(scores.shape[0]-1)
 	return total_scores_diff
 
-def rae_cost(X,hiddens,rec_ins,rec_hiddens):
-	input_rec_cost = T.mean(T.sum((X[1:]-rec_ins)**2,axis=1))
-#	hiddens = T.concatenate([X[0],hiddens[:-1]])
-	hidden_rec_cost = (T.sum((hiddens[:-1] - rec_hiddens[1:])**2) + T.sum((X[0] - rec_hiddens[0])**2))/hiddens.shape[0]
-	return input_rec_cost + hidden_rec_cost
-	
+def rae_cost(X,states,rep_inputs,rep_states):
+	# Actual input - reconstructed input error
+	input_rec_cost = T.mean(T.sum((X[1:]-rep_inputs)**2,axis=1))
+	# Actual prev state - reconstructed prev state error
+	state_rec_cost = (
+			# All states except last, all rec states except first
+			T.sum((states[:-1] - rep_states[1:])**2) +\
+			# First state (first input) and first rec state
+			T.sum((X[0] - rep_states[0])**2)
+		)/states.shape[0]
+	return input_rec_cost + state_rec_cost
 
-	
+
 def create_model(ids,Y,vocab2id,size):
-	V   = create_vocab_vectors(vocab2id,size)
-	X   = V[ids]
-
-	W1 = U.create_shared(U.initial_weights(size,size))
-	b1 = U.create_shared(U.initial_weights(size))
-	W2 = U.create_shared(U.initial_weights(size,size))
-	b2 = U.create_shared(U.initial_weights(size))
-	b  = U.create_shared(U.initial_weights(size))
-
-	hiddens, rec_ins, rec_hiddens = recurrent_combine(X,W1,b1,W2,b2,b)
-	context = hiddens[-1]
-	pairwise = hiddens
-
-	W_pairwise = U.create_shared(U.initial_weights(size,size))
-	W_context  = U.create_shared(U.initial_weights(size,size))
-	b_hidden   = U.create_shared(U.initial_weights(size))
-
-	hidden = T.dot(context,W_context) + T.dot(pairwise,W_pairwise) + b_hidden
-	hidden = T.tanh(hidden)
-#	hidden = hidden * (hidden > 0)
+	word_vector_size = size
+	rae_state_size   = size
+	predictive_hidden_size = size*2
 	
-	W_output = U.create_shared(U.initial_weights(size))
+
+	V   = create_vocab_vectors(vocab2id,word_vector_size)
+	X   = V[ids]
+	
+	# RAE parameters
+	W_input   = U.create_shared(U.initial_weights(word_vector_size,rae_state_size))
+	b_input   = U.create_shared(U.initial_weights(rae_state_size))
+	W_state_p = U.create_shared(U.initial_weights(rae_state_size,rae_state_size))
+	b_state_p = U.create_shared(U.initial_weights(rae_state_size))
+	b_state   = U.create_shared(U.initial_weights(rae_state_size))
+
+	W_input_hidden   = U.create_shared(U.initial_weights(word_vector_size,predictive_hidden_size))
+	W_state_p_hidden = U.create_shared(U.initial_weights(rae_state_size,predictive_hidden_size))
+
+	W_full_context_hidden = U.create_shared(U.initial_weights(rae_state_size,predictive_hidden_size))
+	b_hidden              = U.create_shared(U.initial_weights(predictive_hidden_size))
+
+	W_output              = U.create_shared(U.initial_weights(predictive_hidden_size))
+	
+	states,rep_inputs,rep_states,hidden_partials = recurrent_combine(
+			X,
+			W_input,b_input,
+			W_state_p,b_state_p,b_state,
+			W_input_hidden,W_state_p_hidden,
+		)
+
+	context = states[-1]
+	hidden = T.dot(context,W_full_context_hidden) + hidden_partials + b_hidden
+#	hidden = T.tanh(hidden)
+	hidden = hidden * (hidden > 0)
+	
 	scores = T.dot(hidden,W_output)
 
-	#parameters = [V,W1,W2,b,W_pairwise,W_context,b_output]
-	parameters = [V,W1,b1,W2,b2,b,W_pairwise,W_context,b_hidden,W_output]
+	parameters = [
+			V,
+			W_input,
+			b_input,
+			W_state_p,
+			b_state_p,
+			b_state,
+			W_input_hidden,
+			W_state_p_hidden,
+			W_full_context_hidden,
+			b_hidden,
+			W_output
+		]
 
-	cost = rae_cost(X,hiddens,rec_ins,rec_hiddens) + missing_cost(scores,Y) + 1e-5*sum(T.sum(w**2) for w in parameters)
+	cost = rae_cost(X,states,rep_inputs,rep_states) + missing_cost(scores,Y) + 1e-5*sum(T.sum(w**2) for w in parameters)
 	return scores, cost, parameters
 
 def training_model(vocab2id,size):
@@ -125,5 +140,4 @@ def training_model(vocab2id,size):
 			inputs  = [ids],
 			outputs = T.argmax(scores)
 		)
-
 	return test,train, parameters

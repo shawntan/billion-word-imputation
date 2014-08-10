@@ -45,7 +45,7 @@ for s in sentences(vocab2id,sentence_file):
 #	print s
 	s = np.array(s,dtype=np.int32)
 	if t%100 == 0:
-		words = [id2vocab[idx] for idx in s]
+		words = [id2vocab[idx] if idx != -1 else 'UNK' for idx in s]
 		pred_pos = test(s) + 1
 		act_pos  = removed_idx
 		if pred_pos == act_pos:

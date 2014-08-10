@@ -39,20 +39,24 @@ def recurrent_combine(X,V,V_b,W_input,b_input,W_state_p,b_state_p,b_state,W_inpu
 			outputs_info = [X[0],None,None,None]
 		)
 
-	return states,rep_inputs,rep_states,hidden_partials
+	return states,T.nnet.softmax(rep_inputs),rep_states,hidden_partials
 
 
 def missing_cost(scores,Y):
+	probs = T.nnet.softmax(scores)[0]
+	total_scores_diff = -T.log(probs[Y])
+	"""
 	label_score = scores[Y]
 	scores_diff = -(label_score - (scores + 1))
 	scores_diff = scores_diff * (scores_diff > 0)
 	total_scores_diff = (T.sum(scores_diff) - scores_diff[Y])/(scores.shape[0]-1)
+	"""
 	return total_scores_diff
 
 def rae_cost(ids,X,states,rep_inputs,rep_states):
 	# Actual input - reconstructed input error
 	#input_rec_cost = T.mean(T.sum((X[1:]-rep_inputs)**2,axis=1))
-	input_rec_cost = -T.mean(T.log(T.nnet.softmax(rep_inputs)[T.arange(rep_inputs.shape[0]),ids[1:]]))
+	input_rec_cost = -T.mean(T.log(rep_inputs[T.arange(rep_inputs.shape[0]),ids[1:]]))
 	# Actual prev state - reconstructed prev state error
 	state_rec_cost = (
 			# All states except last, all rec states except first

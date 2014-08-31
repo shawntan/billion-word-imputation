@@ -59,7 +59,7 @@ for s in sentences(vocab2id,sentence_file):
 		print ' '.join(words)
 		print
 	else:
-		score = train(s,removed_idx-1,lr,min(1 - 3.0/(t+5),0.999))
+		score = train(s,removed_idx-1)
 		print score
 
 	t += 1

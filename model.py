@@ -3,7 +3,8 @@ import theano
 import sys
 import theano.tensor as T
 import numpy         as np
-import utils         as U
+from theano_toolkit import utils as U
+from theano_toolkit import updates
 import cPickle       as pickle
 
 from numpy_hinton import print_arr
@@ -133,16 +134,9 @@ def training_model(vocab2id,size):
 	gradients = T.grad(cost,wrt=parameters)
 	print "Computed gradients"
 
-	eps = T.dscalar('eps')
-	mu  = T.dscalar('mu')
-	deltas = [ U.create_shared(np.zeros(p.get_value().shape)) for p in parameters ]
-	delta_nexts = [ mu*delta + eps*grad for delta,grad in zip(deltas,gradients) ]
-	delta_updates = [ (delta, delta_next) for delta,delta_next in zip(deltas,delta_nexts) ]
-	param_updates = [ (param, param - delta_next) for param,delta_next in zip(parameters,delta_nexts) ]
-
 	train = theano.function(
-			inputs  = [ids,Y,eps,mu],
-			updates = delta_updates + param_updates,
+			inputs  = [ids,Y],
+			updates = updates.adadelta(parameters,gradients,0.95,1e-6),
 			outputs = cost
 		)
 

@@ -12,12 +12,18 @@ from vocab import read_file
 import model
 
 def sentences(vocab2id,filename):
+	buffer_size = 100
+	buffered = [None]*buffer_size
+	
+	k = 0
 	for tokens in read_file(filename):
 		#print tokens
-		for i in xrange(len(tokens)): 
-			#if tokens[i] not in vocab2id: print tokens[i]
-			tokens[i] = vocab2id.get(tokens[i],-1)
-		yield tokens
+		for i in xrange(len(tokens)): tokens[i] = vocab2id.get(tokens[i],-1)
+		buffered[k] = tokens
+		k = (k+1)%buffer_size
+		if k==0:
+			random.shuffle(buffered)
+			for s in buffered: yield s
 
 if __name__ == "__main__":
 	vocab_file = sys.argv[1]

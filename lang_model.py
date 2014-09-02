@@ -116,17 +116,18 @@ if __name__ == "__main__":
 	for k,v in vocab2id.iteritems(): id2vocab[v]=k
 
 	test,train, parameters = training_model(vocab2id,60)
-	count = 0
-	for s in sentences(vocab2id,sentence_file):
-		s = np.array(s,dtype=np.int32)
-		score = train(s)
-		print score
-		count += 1
-		if count%100 == 0:
-			pred = test(s)
-			print len(pred)
-			print pred
-			print ' '.join(id2vocab[idx] if idx != -1 else 'UNK' for idx in s)
-			print ' '.join(id2vocab[idx] if idx != len(id2vocab) else 'UNK' for idx in pred)
-
+	for _ in range(10):
+		count = 0
+		for s in sentences(vocab2id,sentence_file):
+			s = np.array(s,dtype=np.int32)
+			score = train(s)
+			print score
+			count += 1
+			if count%100 == 0:
+				pred = test(s)
+				print len(pred)
+				print pred
+				print ' '.join(id2vocab[idx] if idx != -1 else 'UNK' for idx in s)
+				print ' '.join(id2vocab[idx] if idx != len(id2vocab) else 'UNK' for idx in pred)
+				pickle.dump([p.get_value() for p in parameters],open('params','wb'),2)
 

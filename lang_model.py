@@ -17,10 +17,10 @@ def create_vocab_vectors(vocab2id,size):
 	return V,V_b
 
 
-def recurrent_combine(state_0,X,W_input,W_state,b_state):
+def recurrent_combine(state_0,X,W_state,b_state):
 	def step(curr_input,state_p):
 		# Build next layer
-		state = T.dot(curr_input,W_input) + T.dot(state_p,W_state) + b_state
+		state = T.dot(curr_input + state_p,W_state) + b_state
 		state = T.tanh(state)
 
 		return state
@@ -34,29 +34,31 @@ def recurrent_combine(state_0,X,W_input,W_state,b_state):
 	return states
 
 def word_cost(probs,Y):
-	return -T.mean(T.log(probs[:-1,Y[1:]]))
-#	return -T.mean(T.log(probs[:,Y]))
+	labels = Y[1:]
+
+	return -T.mean(T.log(probs[:-1][T.arange(labels.shape[0]),labels]))
+#	return -T.sum(T.log(probs[:,Y]))
 
 def create_model(ids,vocab2id,size):
 	word_vector_size = size
-	rae_state_size   = 2*size
+	rae_state_size   = size
 	predictive_hidden_size = rae_state_size 
 
 	V,b_predict = create_vocab_vectors(vocab2id,word_vector_size)
-	W_predict = U.create_shared(U.initial_weights(predictive_hidden_size,V.get_value().shape[0]))
+	W_predict = V.T #U.create_shared(U.initial_weights(predictive_hidden_size,V.get_value().shape[0]))
 	X = V[ids]
 	
 	# RAE parameters
-	W_input = U.create_shared(U.initial_weights(word_vector_size,rae_state_size))
+#	W_input = U.create_shared(U.initial_weights(word_vector_size,rae_state_size))
 	W_state = U.create_shared(U.initial_weights(rae_state_size,rae_state_size))
 	b_state = U.create_shared(U.initial_weights(rae_state_size))
 	state_0 = U.create_shared(U.initial_weights(rae_state_size))
 
-	W_state_p_hidden = U.create_shared(U.initial_weights(rae_state_size,predictive_hidden_size))
-	b_hidden         = U.create_shared(U.initial_weights(predictive_hidden_size))
+#	W_state_p_hidden = U.create_shared(U.initial_weights(rae_state_size,predictive_hidden_size))
+#	b_hidden         = U.create_shared(U.initial_weights(predictive_hidden_size))
 
 	
-	states = recurrent_combine(state_0,X,W_input,W_state,b_state)
+	states = recurrent_combine(state_0,X,W_state,b_state)
 	
 
 #	hidden = T.dot(states,W_state_p_hidden) + b_hidden
@@ -68,7 +70,7 @@ def create_model(ids,vocab2id,size):
 
 	parameters = [
 			V,
-			W_input,
+#			W_input,
 			W_state,
 			b_state,
 			state_0,
@@ -78,7 +80,7 @@ def create_model(ids,vocab2id,size):
 			b_predict
 		]
 
-	cost = word_cost(scores,ids) # + 1e-5 * sum( T.sum(w**2) for w in parameters )
+	cost = word_cost(scores,ids) + 1e-5 * sum( T.sum(w**2) for w in parameters )
 	return scores, cost, parameters
 
 def training_model(vocab2id,size):
@@ -91,13 +93,14 @@ def training_model(vocab2id,size):
 
 	train = theano.function(
 			inputs  = [ids],
-			updates = updates.adadelta(parameters,gradients,0.95,1e-6),
+			updates = updates.adadelta(parameters,gradients,rho=0.95,eps=1e-6),
+			#updates = updates.momentum(parameters,gradients,mu=0.999,eps=1e-4),
 			outputs = cost
 		)
 
 	test = theano.function(
 			inputs  = [ids],
-			outputs = T.argmax(scores)
+			outputs = T.argmax(scores,axis=1)
 		)
 
 	return test,train,parameters
@@ -109,10 +112,21 @@ if __name__ == "__main__":
 	vocab_file = sys.argv[1]
 	sentence_file = sys.argv[2]
 	vocab2id = pickle.load(open(vocab_file,'r'))
-	test,train, parameters = training_model(vocab2id,50)
+	id2vocab = [None]*len(vocab2id)
+	for k,v in vocab2id.iteritems(): id2vocab[v]=k
+
+	test,train, parameters = training_model(vocab2id,60)
+	count = 0
 	for s in sentences(vocab2id,sentence_file):
 		s = np.array(s,dtype=np.int32)
 		score = train(s)
 		print score
+		count += 1
+		if count%100 == 0:
+			pred = test(s)
+			print len(pred)
+			print pred
+			print ' '.join(id2vocab[idx] if idx != -1 else 'UNK' for idx in s)
+			print ' '.join(id2vocab[idx] if idx != len(id2vocab) else 'UNK' for idx in pred)
 
 

@@ -17,6 +17,7 @@ def sentences(vocab2id,filename):
 	
 	k = 0
 	for tokens in read_file(filename):
+		if len(tokens) < 5: continue
 		#print tokens
 		for i in xrange(len(tokens)): tokens[i] = vocab2id.get(tokens[i],-1)
 		buffered[k] = tokens

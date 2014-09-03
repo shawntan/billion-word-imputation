@@ -35,9 +35,8 @@ def recurrent_combine(state_0,X,W_state,b_state):
 
 def word_cost(probs,Y):
 	labels = Y[1:]
-
-	return -T.mean(T.log2(probs[:-1][T.arange(labels.shape[0]),labels]))
-#	return -T.sum(T.log(probs[:,Y]))
+	lbl_probs = probs[:-1][T.arange(labels.shape[0]),labels]
+	return -T.sum(T.log(lbl_probs)),-T.mean(T.log2(lbl_probs))
 
 def create_model(ids,vocab2id,size):
 	word_vector_size = size
@@ -77,13 +76,14 @@ def create_model(ids,vocab2id,size):
 			W_predict,
 			b_predict
 		]
-
-	cost = word_cost(scores,ids) + 1e-8 * sum( T.sum(w**2) for w in parameters )
-	return scores, cost, parameters
+	log_likelihood, cross_ent = word_cost(scores,ids)
+	cost = log_likelihood + 1e-8 * sum( T.sum(w**2) for w in parameters )
+	obv_cost = cross_ent
+	return scores, cost, obv_cost, parameters
 
 def training_model(vocab2id,size):
 	ids = T.ivector('ids')
-	scores, cost, parameters = create_model(ids,vocab2id,size)
+	scores, cost, obv_cost, parameters = create_model(ids,vocab2id,size)
 
 
 	gradients = T.grad(cost,wrt=parameters)
@@ -93,7 +93,7 @@ def training_model(vocab2id,size):
 			inputs  = [ids],
 			updates = updates.adadelta(parameters,gradients,rho=0.95,eps=1e-6),
 			#updates = updates.momentum(parameters,gradients,mu=0.999,eps=1e-4),
-			outputs = cost#/ids.shape[0]
+			outputs = obv_cost
 		)
 
 	test = theano.function(

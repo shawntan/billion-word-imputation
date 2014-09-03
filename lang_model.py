@@ -21,7 +21,7 @@ def recurrent_combine(state_0,X,W_state,b_state):
 	def step(curr_input,state_p):
 		# Build next layer
 		state = T.dot(curr_input + state_p,W_state) + b_state
-		state = T.tanh(state)
+		state = T.nnet.sigmoid(state)
 
 		return state
 
@@ -36,7 +36,7 @@ def recurrent_combine(state_0,X,W_state,b_state):
 def word_cost(probs,Y):
 	labels = Y[1:]
 
-	return -T.mean(T.log(probs[:-1][T.arange(labels.shape[0]),labels]))
+	return -T.mean(T.log2(probs[:-1][T.arange(labels.shape[0]),labels]))
 #	return -T.sum(T.log(probs[:,Y]))
 
 def create_model(ids,vocab2id,size):
@@ -45,7 +45,7 @@ def create_model(ids,vocab2id,size):
 	predictive_hidden_size = rae_state_size 
 
 	V,b_predict = create_vocab_vectors(vocab2id,word_vector_size)
-	W_predict = V.T #U.create_shared(U.initial_weights(predictive_hidden_size,V.get_value().shape[0]))
+	W_predict = U.create_shared(U.initial_weights(predictive_hidden_size,V.get_value().shape[0]))
 	X = V[ids]
 	
 	# RAE parameters
@@ -70,17 +70,15 @@ def create_model(ids,vocab2id,size):
 
 	parameters = [
 			V,
-#			W_input,
 			W_state,
 			b_state,
 			state_0,
-#			W_state_p_hidden,
 #			b_hidden,
-#			W_predict,
+			W_predict,
 			b_predict
 		]
 
-	cost = word_cost(scores,ids) + 1e-5 * sum( T.sum(w**2) for w in parameters )
+	cost = word_cost(scores,ids) + 1e-8 * sum( T.sum(w**2) for w in parameters )
 	return scores, cost, parameters
 
 def training_model(vocab2id,size):
@@ -90,12 +88,12 @@ def training_model(vocab2id,size):
 
 	gradients = T.grad(cost,wrt=parameters)
 	print "Computed gradients"
-
+	
 	train = theano.function(
 			inputs  = [ids],
 			updates = updates.adadelta(parameters,gradients,rho=0.95,eps=1e-6),
 			#updates = updates.momentum(parameters,gradients,mu=0.999,eps=1e-4),
-			outputs = cost
+			outputs = cost#/ids.shape[0]
 		)
 
 	test = theano.function(
@@ -115,8 +113,14 @@ if __name__ == "__main__":
 	id2vocab = [None]*len(vocab2id)
 	for k,v in vocab2id.iteritems(): id2vocab[v]=k
 
-	test,train, parameters = training_model(vocab2id,60)
-	for _ in range(10):
+	test,train, parameters = training_model(vocab2id,250)
+	print "Loading params..."
+	try:
+		saved_params = pickle.load(open('params','rb'))
+		for p,sp in zip(parameters,saved_params): p.set_value(sp)
+	except:
+		pass
+	for epoch in range(10):
 		count = 0
 		for s in sentences(vocab2id,sentence_file):
 			s = np.array(s,dtype=np.int32)
@@ -125,8 +129,7 @@ if __name__ == "__main__":
 			count += 1
 			if count%100 == 0:
 				pred = test(s)
-				print len(pred)
-				print pred
+				print "Epoch:",epoch
 				print ' '.join(id2vocab[idx] if idx != -1 else 'UNK' for idx in s)
 				print ' '.join(id2vocab[idx] if idx != len(id2vocab) else 'UNK' for idx in pred)
 				pickle.dump([p.get_value() for p in parameters],open('params','wb'),2)

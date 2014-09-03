@@ -44,7 +44,7 @@ def create_model(ids,vocab2id,size):
 	predictive_hidden_size = rae_state_size 
 
 	V,b_predict = create_vocab_vectors(vocab2id,word_vector_size)
-	W_predict = U.create_shared(U.initial_weights(predictive_hidden_size,V.get_value().shape[0]))
+	W_predict = V.T #U.create_shared(U.initial_weights(predictive_hidden_size,V.get_value().shape[0]))
 	X = V[ids]
 	
 	# RAE parameters
@@ -73,11 +73,11 @@ def create_model(ids,vocab2id,size):
 			b_state,
 			state_0,
 #			b_hidden,
-			W_predict,
+#			W_predict,
 			b_predict
 		]
 	log_likelihood, cross_ent = word_cost(scores,ids)
-	cost = log_likelihood + 1e-8 * sum( T.sum(w**2) for w in parameters )
+	cost = log_likelihood + 1e-5 * sum( T.sum(w**2) for w in parameters )
 	obv_cost = cross_ent
 	return scores, cost, obv_cost, parameters
 

@@ -17,11 +17,14 @@ def create_vocab_vectors(vocab2id,size):
 	return V,V_b
 
 
-def recurrent_combine(state_0,X,W_state,b_state):
+def recurrent_combine(state_0,X,W_input,W_state,b_state):
 	def step(curr_input,state_p):
+
 		# Build next layer
-		state = T.dot(curr_input + state_p,W_state) + b_state
-		state = T.nnet.sigmoid(state)
+#		state = curr_input + T.dot(state_p,W_state) + b_state
+		state = T.dot(curr_input,W_input) + T.dot(state_p,W_state) + b_state
+#		state = T.nnet.sigmoid(state)
+		state = T.tanh(state)
 
 		return state
 
@@ -40,23 +43,20 @@ def word_cost(probs,Y):
 def create_model(ids,vocab2id,size):
 	word_vector_size = size
 	rae_state_size   = size
-	predictive_hidden_size = rae_state_size 
+	predictive_hidden_size = rae_state_size
 
 	V,b_predict = create_vocab_vectors(vocab2id,word_vector_size)
-	W_predict = V.T #U.create_shared(U.initial_weights(predictive_hidden_size,V.get_value().shape[0]))
+	W_predict = V.T
+#	W_predict = U.create_shared(U.initial_weights(predictive_hidden_size,V.get_value().shape[0]))
 	X = V[ids]
 	
 	# RAE parameters
-#	W_input = U.create_shared(U.initial_weights(word_vector_size,rae_state_size))
 	W_state = U.create_shared(U.initial_weights(rae_state_size,rae_state_size))
+	W_input = U.create_shared(U.initial_weights(rae_state_size,rae_state_size))
 	b_state = U.create_shared(U.initial_weights(rae_state_size))
 	state_0 = U.create_shared(U.initial_weights(rae_state_size))
-
-#	W_state_p_hidden = U.create_shared(U.initial_weights(rae_state_size,predictive_hidden_size))
-#	b_hidden         = U.create_shared(U.initial_weights(predictive_hidden_size))
-
 	
-	states = recurrent_combine(state_0,X,W_state,b_state)
+	states = recurrent_combine(state_0,X,W_input,W_state,b_state)
 
 	scores = T.dot(states,W_predict) + b_predict
 	scores = T.nnet.softmax(scores)
@@ -66,9 +66,9 @@ def create_model(ids,vocab2id,size):
 	parameters = [
 			V,
 			W_state,
+			W_input,
 			b_state,
 			state_0,
-#			b_hidden,
 #			W_predict,
 			b_predict
 		]
@@ -157,5 +157,6 @@ if __name__ == "__main__":
 			max_test = test_score
 			pickle.dump([p.get_value() for p in parameters],open('params','wb'),2)
 		else:
+			print "Final:",max_test
 			exit()
 

@@ -40,6 +40,24 @@ def word_cost(probs,Y):
 	lbl_probs = probs[T.arange(Y.shape[0]),Y]
 	return -T.sum(T.log(lbl_probs)), -T.mean(T.log2(lbl_probs))
 
+def rae(W_input,W_state,inputs,state_0,states):
+	b_input_rec = U.create_shared(U.initial_weights(W_input.get_value().shape[1]))
+	b_state_rec = U.create_shared(U.initial_weights(W_state.get_value().shape[1]))
+
+	input_rec = T.dot(states,W_input.T) + b_input_rec
+	state_rec = T.tanh(T.dot(states,W_state.T) + b_state_rec)
+
+	input_rec_cost = T.sum((input_rec - inputs)**2)
+	state_rec_cost = T.sum((state_rec[1:] - states[:-1])**2)
+
+	cost = input_rec_cost + state_rec_cost
+
+	return [b_input_rec,b_state_rec],cost
+
+
+
+
+
 def create_model(ids,vocab2id,size):
 	word_vector_size = size
 	rae_state_size   = size
@@ -62,6 +80,8 @@ def create_model(ids,vocab2id,size):
 	scores = T.nnet.softmax(scores)
 
 	log_likelihood, cross_ent = word_cost(scores[:-1],ids[1:])
+	recon_b, rae_cost = rae(W_input,W_state,X,state_0,states)
+
 
 	parameters = [
 			V,
@@ -71,11 +91,11 @@ def create_model(ids,vocab2id,size):
 			state_0,
 #			W_predict,
 			b_predict
-		]
+		] #+ recon_b
+
 
 	cost = log_likelihood + 1e-5 * sum( T.sum(w**2) for w in parameters )
 	obv_cost = cross_ent
-
 	return scores, cost, obv_cost, parameters
 
 def training_model(vocab2id,size):

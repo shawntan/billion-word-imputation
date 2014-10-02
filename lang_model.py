@@ -6,21 +6,17 @@ from theano_toolkit import utils as U
 from theano_toolkit import updates
 from theano_toolkit.parameters import Parameters
 import cPickle       as pickle
-
 from numpy_hinton import print_arr
 from theano.printing import Print
 from vocab import read_file
-
 
 def create_vocab_vectors(P,vocab2id,size):
 	P.V   = U.initial_weights(len(vocab2id) + 1,size)
 	P.V_b = U.initial_weights(len(vocab2id) + 1)
 	return P.V,P.V_b
 
-
 def recurrent_combine(state_0,X,W_input,W_state,b_state):
 	def step(curr_input,state_p):
-
 		# Build next layer
 #		state = curr_input + T.dot(state_p,W_state) + b_state
 		state = T.dot(curr_input,W_input) + T.dot(state_p,W_state) + b_state
@@ -95,7 +91,7 @@ def create_model(ids,vocab2id,size):
 
 def make_accumulate_update(inputs,outputs,parameters,gradients,update_method=updates.adadelta):
 	acc = [ U.create_shared(np.zeros(p.get_value().shape)) for p in parameters ]
-	count = U.create_shared(0)
+	count = U.create_shared(np.int32(0))
 	acc_update = [ (a,a + g) for a,g in zip(acc,gradients) ] + [ (count,count+1) ]
 	acc_gradient = theano.function(
 				inputs = inputs,
@@ -103,7 +99,7 @@ def make_accumulate_update(inputs,outputs,parameters,gradients,update_method=upd
 				updates = acc_update
 			)
 	avg_gradient = [ a/count for a in acc ]
-	clear_update = [ (a,0*a) for a,g in zip(acc,parameters) ] + [ (count,0) ]
+	clear_update = [ (a,0.*a) for a,g in zip(acc,parameters) ] + [ (count,0) ]
 	train_acc = theano.function(
 			inputs=[],
 			updates=update_method(parameters,avg_gradient) + clear_update
@@ -193,4 +189,3 @@ if __name__ == "__main__":
 		else:
 			print "Final:",max_test
 			exit()
-

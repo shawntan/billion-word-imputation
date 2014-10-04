@@ -51,10 +51,6 @@ def rae(P,W_input,W_state,inputs,state_0,states):
 
 	return [P.b_input_rec,P.b_state_rec],cost
 
-
-
-
-
 def create_model(ids,vocab2id,size):
 	word_vector_size = size
 	rae_state_size   = size
@@ -83,11 +79,9 @@ def create_model(ids,vocab2id,size):
 	recon_b, rae_cost = rae(P,P.W_input,P.W_state,X,P.state_0,states)
 
 
-	parameters = P.values()
-
-	cost = log_likelihood + 1e-5 * sum( T.sum(w**2) for w in parameters )
+	cost = log_likelihood + 1e-4 * sum( T.sum(abs(w)) for w in P.values() )
 	obv_cost = cross_ent
-	return scores, cost, obv_cost, parameters
+	return scores, cost, obv_cost, P
 
 def make_accumulate_update(inputs,outputs,parameters,gradients,update_method=updates.adadelta):
 	acc = [ U.create_shared(np.zeros(p.get_value().shape)) for p in parameters ]
@@ -109,9 +103,9 @@ def make_accumulate_update(inputs,outputs,parameters,gradients,update_method=upd
 
 def training_model(vocab2id,size):
 	ids = T.ivector('ids')
-	scores, cost, obv_cost, parameters = create_model(ids,vocab2id,size)
-
-
+	scores, cost, obv_cost, P = create_model(ids,vocab2id,size)
+	
+	parameters = P.values()
 	gradients = T.grad(cost,wrt=parameters)
 	print "Computed gradients"
 	acc_gradient,train_acc = make_accumulate_update(
@@ -130,7 +124,7 @@ def training_model(vocab2id,size):
 			outputs = T.argmax(scores,axis=1)
 		)
 
-	return predict,acc_gradient,train_acc,test,parameters
+	return predict,acc_gradient,train_acc,test,P
 
 def run_test(vocab2id,test_file,test):
 	total,count = 0,0
@@ -153,39 +147,26 @@ if __name__ == "__main__":
 	id2vocab = [None]*len(vocab2id)
 	for k,v in vocab2id.iteritems(): id2vocab[v]=k
 
-	predict,acc_gradient,train_acc,test,parameters = training_model(vocab2id,20)
-	print "Loading params..."
-	try:
-		saved_params = pickle.load(open('params','rb'))
-		for p,sp in zip(parameters,saved_params): p.set_value(sp)
-	except:
-		pass
+	predict,acc_gradient,train_acc,test,P = training_model(vocab2id,96)
 
+	import os.path
+	if os.path.isfile('params'): 
+		print "Loading params..."
+		P.load('params')
+	print "Starting training..."
 	max_test = np.inf
-	prev_params = parameters[0].get_value()
 	for epoch in range(10):
 		count = 0
-
 		for s in sentences(vocab2id,sentence_file):
 			s = np.array(s,dtype=np.int32)
 			score = acc_gradient(s)
-			print score
 			count += 1
-			if count%50 == 0:
-				train_acc()
-				curr_params = parameters[0].get_value()
-				#print
-				#print np.sum((curr_params-prev_params)**2)
-				#print
-				prev_params = curr_params
-				
+			if count%50 == 0: train_acc()
 		test_score = run_test(vocab2id,test_file,test)
-		print
-		print "Test result:",test_score
-		print
+		print "Epoch %d, Test result: %0.4f"%(epoch,test_score)
 		if test_score < max_test:
 			max_test = test_score
-			pickle.dump([p.get_value() for p in parameters],open('params','wb'),2)
+			P.save('params')
 		else:
 			print "Final:",max_test
 			exit()

@@ -19,8 +19,7 @@ def recurrent_combine(state_0,X,W_input,W_state,b_state):
 	def step(curr_input,state_p):
 		# Build next layer
 #		state = curr_input + T.dot(state_p,W_state) + b_state
-		state = T.dot(curr_input,W_input) + T.dot(state_p,W_state) + b_state
-#		state = T.nnet.sigmoid(state)
+		state = T.dot(state_p,W_input)*curr_input + T.dot(state_p,W_state) + b_state
 		state = T.tanh(state)
 
 		return state
@@ -60,23 +59,23 @@ def create_model(ids,vocab2id,size):
 	V,b_predict = create_vocab_vectors(P,vocab2id,word_vector_size)
 	W_predict = V.T
 #	W_predict = U.create_shared(U.initial_weights(predictive_hidden_size,V.get_value().shape[0]))
-	X = V[ids]
-
-
 
 	# RAE parameters
+	P.W_transform = U.initial_weights(rae_state_size,rae_state_size)
+	P.b_transform = U.initial_weights(rae_state_size)
 	P.W_state = U.initial_weights(rae_state_size,rae_state_size)
 	P.W_input = U.initial_weights(rae_state_size,rae_state_size)
 	P.b_state = U.initial_weights(rae_state_size)
 	P.state_0 = U.initial_weights(rae_state_size)
 	
+	X = T.dot(V[ids],P.W_transform) + P.b_transform
 	states = recurrent_combine(P.state_0,X,P.W_input,P.W_state,P.b_state)
 
 	scores = T.dot(states,W_predict) + b_predict
 	scores = T.nnet.softmax(scores)
 
 	log_likelihood, cross_ent = word_cost(scores[:-1],ids[1:])
-	recon_b, rae_cost = rae(P,P.W_input,P.W_state,X,P.state_0,states)
+#	recon_b, rae_cost = rae(P,P.W_input,P.W_state,X,P.state_0,states)
 
 
 	cost = log_likelihood + 1e-4 * sum( T.sum(abs(w)) for w in P.values() )
@@ -147,7 +146,7 @@ if __name__ == "__main__":
 	id2vocab = [None]*len(vocab2id)
 	for k,v in vocab2id.iteritems(): id2vocab[v]=k
 
-	predict,acc_gradient,train_acc,test,P = training_model(vocab2id,96)
+	predict,acc_gradient,train_acc,test,P = training_model(vocab2id,20)
 
 	import os.path
 	if os.path.isfile('params'): 
@@ -161,7 +160,9 @@ if __name__ == "__main__":
 			s = np.array(s,dtype=np.int32)
 			score = acc_gradient(s)
 			count += 1
-			if count%50 == 0: train_acc()
+			if count%50 == 0:
+				train_acc()
+				print score
 		test_score = run_test(vocab2id,test_file,test)
 		print "Epoch %d, Test result: %0.4f"%(epoch,test_score)
 		if test_score < max_test:

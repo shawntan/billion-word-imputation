@@ -46,6 +46,20 @@ def build_sampler(vocab2id,size):
 		)
 	return sample_next,P
 
+def sample_from_probs(probs):
+	probs = np.asarray(probs,dtype=np.float64)
+	"""
+	top_args = np.argsort(-probs)[:1000]
+	top_args_prob = probs[top_args]/probs[top_args].sum()
+	top_args_idx  = np.random.choice(top_args.shape[0],1,p=top_args_prob)[0]
+	word_idx = top_args[top_args_idx]
+	"""	
+	probs = probs/probs.sum()
+	word_idx = np.random.choice(probs.shape[0],1,p=probs)[0]
+	return word_idx
+
+
+
 if __name__ == "__main__":
 	vocab_file = sys.argv[1]
 	params_file = sys.argv[2]
@@ -56,7 +70,7 @@ if __name__ == "__main__":
 	for k,v in vocab2id.iteritems(): id2vocab[v] = k
 
 	print "Build model..."
-	sample_next,P = build_sampler(vocab2id,20)
+	sample_next,P = build_sampler(vocab2id,96)
 	print "Loading params..."
 	P.load(sys.argv[2])
 	state_0 = P.state_0.get_value()
@@ -64,11 +78,9 @@ if __name__ == "__main__":
 	end_idx = vocab2id['<END>']
 	for _ in xrange(10):
 		probs,state_p = sample_next(start_idx,state_0)
-		word_idx = np.random.choice(len(id2vocab)+1,1,p=probs)[0]
+		word_idx = sample_from_probs(probs) 
 		while word_idx != end_idx:
 			print (id2vocab[word_idx] if word_idx < len(id2vocab) else "<unk>"),
 			probs,state_p = sample_next(word_idx,state_p)
-			probs = np.asarray(probs,dtype=np.float64)
-			probs = probs/probs.sum()
-			word_idx = np.random.choice(len(id2vocab)+1,1,p=probs)[0]
+			word_idx = sample_from_probs(probs) 
 		print ("\n"),

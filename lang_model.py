@@ -11,8 +11,8 @@ from theano.printing import Print
 from vocab import read_file
 
 def create_vocab_vectors(P,vocab2id,size):
-	P.V   = U.initial_weights(len(vocab2id) + 1,size)
-	P.V_b = U.initial_weights(len(vocab2id) + 1)
+	P.V   = 0.1 * np.random.randn(len(vocab2id) + 1,size)
+	P.V_b = np.zeros((len(vocab2id) + 1))
 	return P.V,P.V_b
 
 def recurrent_combine(state_0,X,W_input,W_state,b_state):
@@ -62,10 +62,10 @@ def create_model(ids,vocab2id,size):
 
 	# RAE parameters
 	P.W_transform = U.initial_weights(rae_state_size,rae_state_size)
-	P.b_transform = U.initial_weights(rae_state_size)
+	P.b_transform = np.zeros((rae_state_size,))
 	P.W_state = U.initial_weights(rae_state_size,rae_state_size)
 	P.W_input = U.initial_weights(rae_state_size,rae_state_size)
-	P.b_state = U.initial_weights(rae_state_size)
+	P.b_state = np.zeros((rae_state_size,))
 	P.state_0 = U.initial_weights(rae_state_size)
 	
 	X = T.dot(V[ids],P.W_transform) + P.b_transform
@@ -146,7 +146,7 @@ if __name__ == "__main__":
 	id2vocab = [None]*len(vocab2id)
 	for k,v in vocab2id.iteritems(): id2vocab[v]=k
 
-	predict,acc_gradient,train_acc,test,P = training_model(vocab2id,20)
+	predict,acc_gradient,train_acc,test,P = training_model(vocab2id,96)
 
 	import os.path
 	if os.path.isfile('params'): 
@@ -162,7 +162,7 @@ if __name__ == "__main__":
 			count += 1
 			if count%50 == 0:
 				train_acc()
-				print score
+			if count%1000 == 0: print ("."),
 		test_score = run_test(vocab2id,test_file,test)
 		print "Epoch %d, Test result: %0.4f"%(epoch,test_score)
 		if test_score < max_test:

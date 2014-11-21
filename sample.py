@@ -64,6 +64,8 @@ if __name__ == "__main__":
 	end_idx = vocab2id['<END>']
 	for _ in xrange(10):
 		probs,state_p = sample_next(start_idx,state_0)
+		probs = np.asarray(probs,dtype=np.float64)
+		probs = probs/probs.sum()
 		word_idx = np.random.choice(len(id2vocab)+1,1,p=probs)[0]
 		while word_idx != end_idx:
 			print (id2vocab[word_idx] if word_idx < len(id2vocab) else "<unk>"),
